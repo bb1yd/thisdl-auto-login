@@ -25,6 +25,8 @@ python3 --version
 python3 ./thisdl-login install
 ```
 
+安装后，连接 `Students` 网络或唤醒电脑时会自动尝试登录。认证成功后，系统登录弹窗会自动关闭，可能会短暂出现后消失。
+
 
 ## 命令
 

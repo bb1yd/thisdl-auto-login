@@ -34,6 +34,28 @@ class FakeJar:
 
 
 class AuthTests(unittest.TestCase):
+    def test_portal_http_200_does_not_confirm_authentication(self):
+        class Opener:
+            def open(self, request, timeout):
+                if request.full_url.endswith("/revisit/login"):
+                    return Response(request.full_url, b'{"success":true}')
+                return Response(request.full_url, b'<html>Please sign in</html>')
+
+        with patch.object(auth, "build_opener", return_value=Opener()):
+            self.assertFalse(auth.submit_login(PAGE, FakeJar()))
+
+    def test_failure_redirect_does_not_confirm_authentication(self):
+        for destination in ("/am/controller/portal/navigation/fail", "http://example.com/am/controller/portal/navigation/success"):
+            with self.subTest(destination=destination):
+                class Opener:
+                    def open(self, request, timeout):
+                        if request.full_url.endswith("/revisit/login"):
+                            return Response(request.full_url, b'{"success":true}')
+                        raise HTTPError(request.full_url, 302, "Found", {"Location": destination}, None)
+
+                with patch.object(auth, "build_opener", return_value=Opener()):
+                    self.assertFalse(auth.submit_login(PAGE, FakeJar()))
+
     def test_revisit_page_requires_school_and_revisit(self):
         self.assertTrue(auth.is_revisit_page(PAGE))
         self.assertTrue(auth.is_revisit_page(PAGE.replace("/login/pc/", "/login/mobile/")))

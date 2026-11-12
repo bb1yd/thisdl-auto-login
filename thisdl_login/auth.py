@@ -137,8 +137,8 @@ def submit_login(page_url, jar):
         })
         try:
             with opener.open(next_request, timeout=TIMEOUT) as response:
-                LOG.info("认证请求完成，HTTP %s。", response.status)
-                return 200 <= response.status < 300
+                LOG.warning("认证请求返回 HTTP %s，但未确认成功页跳转，保留认证窗口。", response.status)
+                return False
         except HTTPError as exc:
             if 300 <= exc.code < 400:
                 location = urlsplit(urljoin(next_request.full_url, exc.headers.get("Location", "")))

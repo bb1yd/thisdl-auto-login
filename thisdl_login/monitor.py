@@ -3,8 +3,12 @@
 import ctypes
 import ctypes.util
 import logging
+import os
 import plistlib
+import pwd
+import subprocess
 import threading
+import time
 
 from . import auth
 
@@ -30,12 +34,32 @@ def _function(library, name, result, arguments):
     return fn
 
 
+def close_login_window():
+    """Send TERM only to this user's macOS captive portal assistant."""
+    try:
+        user = pwd.getpwuid(os.getuid()).pw_name
+        result = subprocess.run(
+            ["/usr/bin/killall", "-TERM", "-u", user, "Captive Network Assistant"],
+            capture_output=True, timeout=3,
+        )
+        if result.returncode == 0:
+            LOG.info("已请求关闭系统认证窗口。")
+            return True
+        LOG.info("尚未发现或未能关闭系统认证窗口（退出码 %s）。", result.returncode)
+    except (OSError, KeyError, subprocess.TimeoutExpired) as exc:
+        LOG.warning("无法关闭系统认证窗口（%s）。", type(exc).__name__)
+    return False
+
+
 class RetryWorker:
     """Coalesce events while keeping network requests off the system run loop."""
 
-    def __init__(self, check=auth.check_and_login, retry_delays=(0, 8, 15)):
+    def __init__(self, check=auth.check_and_login, retry_delays=(0, 8, 15), on_success=None,
+                 dismiss_delays=(0, 1, 2)):
         self._check = check
         self._retry_delays = retry_delays
+        self._on_success = on_success
+        self._dismiss_delays = dismiss_delays
         self._condition = threading.Condition()
         self._generation = 0
 
@@ -43,6 +67,22 @@ class RetryWorker:
         with self._condition:
             self._generation += 1
             self._condition.notify()
+
+    def _dismiss_after_login(self):
+        # The gateway's success redirect is the authority. Waiting for external
+        # connectivity here can deadlock while the system login window is open.
+        # Keep pending network events for the next check, without discarding a
+        # successful login or requiring another portal page to close the window.
+        for delay in self._dismiss_delays:
+            if delay:
+                time.sleep(delay)
+            try:
+                if self._on_success() is not False:
+                    return
+            except Exception as exc:
+                LOG.warning("处理认证窗口失败（%s）。", type(exc).__name__)
+                return
+        LOG.info("本轮关闭认证窗口的有限重试已结束。")
 
     def run(self):
         handled = 0
@@ -57,10 +97,14 @@ class RetryWorker:
                     if changed:
                         break
                 try:
-                    if self._check():
-                        break
+                    success = self._check()
                 except Exception as exc:
                     LOG.error("校园网检测异常（%s）。", type(exc).__name__)
+                    success = False
+                if success:
+                    if self._on_success is not None:
+                        self._dismiss_after_login()
+                    break
                 with self._condition:
                     if self._generation != handled:
                         break
@@ -218,7 +262,7 @@ class MacNotifications:
 
 
 def run(on_ready=None):
-    worker = RetryWorker()
+    worker = RetryWorker(on_success=close_login_window)
     threading.Thread(target=worker.run, name="campus-login", daemon=True).start()
     monitor = MacNotifications(worker)
     try:
