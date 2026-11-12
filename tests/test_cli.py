@@ -61,6 +61,7 @@ class CliTests(unittest.TestCase):
     def test_install_disable_enable_uninstall(self):
         cli.install()
         self.assertTrue(cli.MARKER.is_file())
+        self.assertTrue((cli.APP / "thisdl_login/transport.py").is_file())
         self.assertTrue(cli.BIN.is_symlink())
         self.assertTrue(self.launchd.running)
         result = subprocess.run([sys.executable, str(cli.BIN), "--help"], capture_output=True, text=True)

@@ -10,6 +10,8 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qs, urljoin, urlsplit
 from urllib.request import HTTPCookieProcessor, HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
+from .transport import WiFiHTTPHandler
+
 LOG = logging.getLogger(__name__)
 PORTAL = "http://10.0.11.251:8080"
 PORTAL_HOST = "10.0.11.251:8080"
@@ -106,7 +108,7 @@ def is_revisit_page(url):
     )
 
 
-def submit_login(page_url, jar):
+def submit_login(page_url, jar, interface=None):
     headers = {"Accept": "application/json", "Cache-Control": "no-cache", "Referer": page_url,
                "User-Agent": USER_AGENT, "X-Requested-With": "XMLHttpRequest"}
     request = Request(PORTAL + "/am/controller/portal/revisit/login", headers=headers)
@@ -116,7 +118,8 @@ def submit_login(page_url, jar):
         LOG.warning("认证页没有提供当前会话，请手动登录。")
         return False
     # The same in-memory cookie jar is used for both requests; no credentials are stored.
-    opener = build_opener(ProxyHandler({}), HTTPCookieProcessor(jar), NoRedirect())
+    handlers = [WiFiHTTPHandler(interface)] if interface else []
+    opener = build_opener(ProxyHandler({}), HTTPCookieProcessor(jar), NoRedirect(), *handlers)
     try:
         with opener.open(request, timeout=TIMEOUT) as response:
             raw = response.read(65537)
@@ -154,11 +157,12 @@ def submit_login(page_url, jar):
         return False
 
 
-def check_and_login():
+def check_and_login(interface=None):
     headers = {"User-Agent": USER_AGENT, "Cache-Control": "no-cache"}
     for probe in PROBES:
         jar = http.cookiejar.CookieJar()
-        opener = build_opener(ProxyHandler({}), HTTPCookieProcessor(jar), PortalRedirects())
+        handlers = [WiFiHTTPHandler(interface)] if interface else []
+        opener = build_opener(ProxyHandler({}), HTTPCookieProcessor(jar), PortalRedirects(), *handlers)
         request = Request(probe, headers=headers)
         try:
             for hop in range(4):
@@ -166,7 +170,7 @@ def check_and_login():
                     url = response.geturl()
                     if is_revisit_page(url):
                         LOG.info("发现校园网回访认证页。")
-                        return submit_login(url, jar)
+                        return submit_login(url, jar, interface=interface)
                     parts = urlsplit(url)
                     body = response.read(16384)
                     is_portal = (parts.scheme, parts.netloc) == ("http", PORTAL_HOST)

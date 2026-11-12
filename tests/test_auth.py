@@ -137,9 +137,12 @@ class AuthTests(unittest.TestCase):
 
         login = Login()
         with patch.object(auth.http.cookiejar, "CookieJar", return_value=FakeJar()), \
-             patch.object(auth, "build_opener", side_effect=[Probe(), login]):
-            self.assertTrue(auth.check_and_login())
+             patch.object(auth, "build_opener", side_effect=[Probe(), login]) as build:
+            self.assertTrue(auth.check_and_login(interface="en0"))
         self.assertEqual(login.calls, 2)
+        for call in build.call_args_list:
+            handlers = [handler for handler in call.args if isinstance(handler, auth.WiFiHTTPHandler)]
+            self.assertEqual([handler.interface for handler in handlers], ["en0"])
 
     def test_portal_login_receives_current_cookie_from_real_jar(self):
         jar = http.cookiejar.CookieJar()

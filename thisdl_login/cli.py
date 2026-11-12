@@ -24,7 +24,7 @@ LOG = APP / "activity.log"
 MARKER = APP / ".thisdl-login"
 READY = APP / ".ready"
 SOURCE = Path(__file__).resolve().parent.parent
-FILES = ("__init__.py", "auth.py", "cli.py", "monitor.py")
+FILES = ("__init__.py", "auth.py", "cli.py", "monitor.py", "transport.py")
 
 
 def domain():

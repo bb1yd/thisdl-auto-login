@@ -123,6 +123,20 @@ class MonitorTests(unittest.TestCase):
         obj._network_changed(None, None, None)
         obj.worker.notify.assert_called_once()
 
+    def test_wifi_change_triggers_check_when_vpn_is_primary(self):
+        obj = monitor.MacNotifications.__new__(monitor.MacNotifications)
+        obj.worker = Mock()
+        obj.wifi_interface = "en0"
+        values = {
+            "State:/Network/Global/IPv4": {"PrimaryInterface": "utun3"},
+            "State:/Network/Interface/en0/IPv4": {"Addresses": ["10.1.1.2"]},
+        }
+        obj._copy_value = lambda key: values.get(key)
+        obj.previous = obj._snapshot()
+        values["State:/Network/Interface/en0/IPv4"] = {"Addresses": ["10.1.1.3"]}
+        obj._network_changed(None, None, None)
+        obj.worker.notify.assert_called_once()
+
     def test_event_runs_and_retries(self):
         done = threading.Event()
         calls = []

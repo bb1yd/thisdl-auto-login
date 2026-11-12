@@ -11,6 +11,7 @@ import threading
 import time
 
 from . import auth
+from .transport import wifi_interface
 
 LOG = logging.getLogger(__name__)
 NETWORK_PATTERNS = (
@@ -111,8 +112,9 @@ class RetryWorker:
 
 
 class MacNotifications:
-    def __init__(self, worker):
+    def __init__(self, worker, interface=None):
         self.worker = worker
+        self.wifi_interface = interface
         self.cf = ctypes.CDLL(ctypes.util.find_library("CoreFoundation"))
         self.sc = ctypes.CDLL(ctypes.util.find_library("SystemConfiguration"))
         self.io = ctypes.CDLL(ctypes.util.find_library("IOKit"))
@@ -178,11 +180,14 @@ class MacNotifications:
         ipv4 = self._copy_value("State:/Network/Global/IPv4")
         ipv6 = self._copy_value("State:/Network/Global/IPv6")
         values = [ipv4, ipv6]
+        interfaces = {self.wifi_interface} if self.wifi_interface else set()
         for global_state in (ipv4, ipv6):
             interface = global_state.get("PrimaryInterface") if isinstance(global_state, dict) else None
             if interface:
-                for kind in ("IPv4", "IPv6", "AirPort"):
-                    values.append(self._copy_value("State:/Network/Interface/%s/%s" % (interface, kind)))
+                interfaces.add(interface)
+        for interface in sorted(interfaces):
+            values.append((interface, [self._copy_value("State:/Network/Interface/%s/%s" % (interface, kind))
+                                       for kind in ("IPv4", "IPv6", "AirPort")]))
         return values
 
     def _network_changed(self, store, changed_keys, info):
@@ -262,9 +267,12 @@ class MacNotifications:
 
 
 def run(on_ready=None):
-    worker = RetryWorker(on_success=close_login_window)
+    interface = wifi_interface()
+    LOG.info("认证探测和登录使用 Wi-Fi 接口 %s。", interface)
+    worker = RetryWorker(check=lambda: auth.check_and_login(interface=interface),
+                         on_success=close_login_window)
     threading.Thread(target=worker.run, name="campus-login", daemon=True).start()
-    monitor = MacNotifications(worker)
+    monitor = MacNotifications(worker, interface=interface)
     try:
         monitor.start(on_ready=on_ready)
     finally:
