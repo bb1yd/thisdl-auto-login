@@ -25,11 +25,6 @@ python3 --version
 python3 ./thisdl-login install
 ```
 
-安装会将程序复制到 `~/Library/Application Support/ThisDLLogin/`，创建当前用户的 LaunchAgent 并启用。它还会在 `~/.local/bin/thisdl-login` 建立链接，但不会修改 shell 配置。如果 `~/.local/bin` 尚未加入 `PATH`，可以使用完整路径运行：
-
-```bash
-~/.local/bin/thisdl-login
-```
 
 ## 命令
 
